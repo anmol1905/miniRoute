@@ -1,4 +1,14 @@
 {
     "name": "@anveeg/mini-route",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "description": "Creates less routes for your whole project",
+    "license": "MIT",
+    "repository": "anmol1905/miniRoute",
+    "main": "index.js",
+    "keywords": [
+        "route",
+        "npm",
+        "package",
+        "anveeg"
+    ]
 }
