@@ -8,4 +8,3 @@
 npm i @anveeg/mini-route
 
 ## Usage
-
