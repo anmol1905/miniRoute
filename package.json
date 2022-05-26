@@ -10,5 +10,8 @@
         "npm",
         "package",
         "anveeg"
-    ]
+    ],
+    "dependencies": {
+        "linebyline": "^1.3.0"
+    }
 }
