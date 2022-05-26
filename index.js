@@ -1,4 +1,4 @@
-const lineReader = require('./readFirst');
+const lineReader = require('./read-first');
 const NodeCache = require("node-cache");
 const myCache = new NodeCache();
 
@@ -11,7 +11,7 @@ const api = async function (app, constant) {
       if (lineCounter == 1) {
         obj[line.replace(/(.*)=/, "").trim().split(' ')[0]] = constant[i]
         myCache.set("controllers", obj);
-        return false; // stop reading
+        return false;
       }
     });
   }
@@ -31,12 +31,10 @@ const api = async function (app, constant) {
     try {
       let cacheObj = myCache.get("controllers")
       let reqObj = JSON.parse(req.params.payload)
-      
+
       for (let i = 0; i < reqObj.middleware.length; i++) {
-        
         let data = Object.keys(cacheObj).filter(key => key == reqObj.middleware[i].split('.')[0])[0];
         let controller = require(cacheObj[data])
-       
         await controller[reqObj.middleware[i].split('.')[1]](req, res, next);
       }
     } catch (err) {
