@@ -1,4 +1,4 @@
-const lineReader = require('line-reader');
+const lineReader = require('./readFirst');
 const NodeCache = require("node-cache");
 const myCache = new NodeCache();
 
