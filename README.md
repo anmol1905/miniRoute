@@ -5,10 +5,11 @@
 ![npm bundle size (scoped)](https://img.shields.io/bundlephobia/min/@anveeg/mini-route)
 
 * [Installation](#install)
-* [Usage](#usage)
+* [Basic Usage](#basic-usage)
     * [Server Index File](#server-index-file)
     * [Controller File](#controller-file)
     * [Client Side](#function-call-from-client-side)
+* [Advanced Usage](#advanced-usage)
 * [License](#license)
 
 
@@ -17,7 +18,7 @@
 $ npm i @anveeg/mini-route
 ```
 
-## Usage
+## Basic Usage
 ### Server index file
 ```sh
 const express = require('express');
@@ -74,6 +75,27 @@ function 1 is the function defined in the controller file \
 let reqOptions = {
   url: "http://localhost:3000/control1.function1/{"param1":"value1", "param2": "value2"}",
   method: "GET", // or POST/PUT/DELETE
+  headers: headersList,
+  data: bodyContent,
+}
+
+axios.request(reqOptions).then(function (response) {
+  console.log(response.data);
+})
+```
+
+## Advanced Usage
+### Custom Middleware
+From Client side send middleware array in the parameter object like this-
+
+### Note -
+1. Parameter name should be middleware
+2. seperate controller name and function name with a dot (.)
+
+```sh
+let reqOptions = {
+  url: "http://localhost:2000/control1.testConttroller/{"param1":"value1", "param2": "value2", "middleware": ["control2.multerFunction", "control3.authenticateFunction"]}",
+  method: "GET",
   headers: headersList,
   data: bodyContent,
 }
