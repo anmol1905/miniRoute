@@ -1,6 +1,5 @@
 const lineReader = require('./read-first');
 const NodeCache = require("./cache");
-// const myCache = new NodeCache();
 
 const api = async function (app, constant) {
   if (typeof (app) !== 'function') {
@@ -14,8 +13,8 @@ const api = async function (app, constant) {
     const liner = new lineReader(constant[i]);
     // console.log(liner)
     let line = liner.next()
-      obj[line.toString('ascii').replace(/(.*)=/, "").trim().split(' ')[0]] = constant[i]
-      NodeCache.put("controllers", obj);
+    obj[line.toString('ascii').replace(/(.*)=/, "").trim().split(' ')[0]] = constant[i]
+    NodeCache.put("controllers", obj);
   }
 
   function controllerFunction(req, res, next) {
@@ -39,6 +38,10 @@ const api = async function (app, constant) {
   async function customMiddleware(req, res, next) {
 
     try {
+      if (!req.params.payload) {
+        next()
+        return
+      }
       let cacheObj = NodeCache.get("controllers")
       let reqObj = JSON.parse(req.params.payload)
       if (!reqObj.middleware) {
