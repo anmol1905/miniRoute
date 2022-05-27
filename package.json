@@ -10,8 +10,5 @@
         "npm",
         "package",
         "anveeg"
-    ],
-    "dependencies": {
-        "node-cache": "^5.1.2"
-    }
+    ]
 }

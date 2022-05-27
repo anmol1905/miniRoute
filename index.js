@@ -1,6 +1,6 @@
 const lineReader = require('./read-first');
-const NodeCache = require("node-cache");
-const myCache = new NodeCache();
+const NodeCache = require("./cache");
+// const myCache = new NodeCache();
 
 const api = async function (app, constant) {
   if (typeof (app) !== 'function') {
@@ -15,7 +15,7 @@ const api = async function (app, constant) {
     // console.log(liner)
     let line = liner.next()
       obj[line.toString('ascii').replace(/(.*)=/, "").trim().split(' ')[0]] = constant[i]
-      myCache.set("controllers", obj);
+      NodeCache.put("controllers", obj);
   }
 
   function controllerFunction(req, res, next) {
@@ -23,7 +23,8 @@ const api = async function (app, constant) {
       if (!req.params.functionName.includes('.')) {
         throw new TypeError("Seperate controller name and function name with a dot")
       }
-      let cacheObj = myCache.get("controllers")
+      let cacheObj = NodeCache.get("controllers")
+      console.log("🚀 ~ file: index.js ~ line 27 ~ controllerFunction ~ cacheObj", cacheObj)
       let data = Object.keys(cacheObj).filter(key => key == req.params.functionName.split('.')[0])[0];
       if (!data) {
         throw new TypeError("Controller paramter does not match with any controller")
@@ -38,7 +39,7 @@ const api = async function (app, constant) {
   async function customMiddleware(req, res, next) {
 
     try {
-      let cacheObj = myCache.get("controllers")
+      let cacheObj = NodeCache.get("controllers")
       let reqObj = JSON.parse(req.params.payload)
       if (!reqObj.middleware) {
         next()
