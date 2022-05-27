@@ -1,306 +1,137 @@
 'use strict';
 
-var fs = require('fs'),
-    StringDecoder = require('string_decoder').StringDecoder;
+const fs = require('fs');
 
-function createLineReader(readStream, options, creationCb) {
-  if (options instanceof Function) {
-    creationCb = options;
-    options = undefined;
-  }
-  if (!options) options = {};
+/**
+ * @class
+ */
+class LineByLine {
+    constructor(file) {
+        this.readChunk = 1024;
 
-  var encoding = options.encoding || 'utf8',
-      separator = options.separator || /\r\n?|\n/,
-      bufferSize = options.bufferSize || 1024,
-      bufferStr = '',
-      decoder = new StringDecoder(encoding),
-      closed = false,
-      eof = false,
-      separatorIndex = -1,
-      separatorLen,
-      readDefer,
-      moreToRead = false,
-      findSeparator;
+        if (typeof file === 'number') {
+            this.fd = file;
+        } else {
+            this.fd = fs.openSync(file, 'r');
+        }
 
-  if (separator instanceof RegExp) {
-    findSeparator = function() {
-      var result = separator.exec(bufferStr);
-      if (result && (result.index + result[0].length < bufferStr.length || eof)) {
-        separatorIndex = result.index;
-        separatorLen = result[0].length;
-      } else {
-        separatorIndex = -1;
-        separatorLen = 0;
-      }
+        this.newLineCharacter = 0x0a;
+
+        this.eofReached = false;
+        this.linesCache = [];
+        this.fdPosition = 0;
+    }
+
+    _searchInBuffer(buffer, hexNeedle) {
+        let found = -1;
+
+        for (let i = 0; i <= buffer.length; i++) {
+            let b_byte = buffer[i];
+            if (b_byte === hexNeedle) {
+                found = i;
+                break;
+            }
+        }
+
+        return found;
+    }
+
+    close() {
+        fs.closeSync(this.fd);
+        this.fd = null;
+    }
+
+    _extractLines(buffer) {
+        let line;
+        const lines = [];
+        let bufferPosition = 0;
+
+        let lastNewLineBufferPosition = 0;
+        while (true) {
+            let bufferPositionValue = buffer[bufferPosition++];
+
+            if (bufferPositionValue === this.newLineCharacter) {
+                line = buffer.slice(lastNewLineBufferPosition, bufferPosition);
+                lines.push(line);
+                lastNewLineBufferPosition = bufferPosition;
+            } else if (bufferPositionValue === undefined) {
+                break;
+            }
+        }
+
+        let leftovers = buffer.slice(lastNewLineBufferPosition, bufferPosition);
+        if (leftovers.length) {
+            lines.push(leftovers);
+        }
+
+        return lines;
     };
-  } else {
-    separatorLen = separator.length;
-    findSeparator = function() {
-      separatorIndex = bufferStr.indexOf(separator);
-    };
-  }
 
-  function getReadStream() {
-    return readStream;
-  }
+    _readChunk(lineLeftovers) {
+        let totalBytesRead = 0;
 
-  function close(cb) {
-    if (!closed) {
-      closed = true;
-      if (typeof readStream.close == 'function') {
-        readStream.close();
-      }
-      setImmediate(cb);
-    }
-  }
+        let bytesRead;
+        const buffers = [];
+        do {
+            const readBuffer = new Buffer(this.readChunk);
 
-  function onFailure(err) {
-    close(function(err2) {
-      return creationCb(err || err2);
-    });
-  }
+            bytesRead = fs.readSync(this.fd, readBuffer, 0, this.readChunk, this.fdPosition);
+            totalBytesRead = totalBytesRead + bytesRead;
 
-  function isOpen() {
-    return !closed;
-  }
+            this.fdPosition = this.fdPosition + bytesRead;
 
-  function isClosed() {
-    return closed;
-  }
+            buffers.push(readBuffer);
+        } while (bytesRead && this._searchInBuffer(buffers[buffers.length-1], this.newLineCharacter) === -1);
 
-  function waitForMoreToRead(cb) {
-    if (moreToRead) {
-      cb();
-    } else {
-      readDefer = cb;
-    }
-  }
+        let bufferData = Buffer.concat(buffers);
 
-  function resumeDeferredRead() {
-    if (readDefer) {
-      readDefer();
-      readDefer = null;
-    }
-  }
-
-  function read(cb) {
-    waitForMoreToRead(function() {
-      var chunk;
-
-      try {
-        chunk = readStream.read(bufferSize);
-      } catch (err) {
-        cb(err);
-      }
-
-      if (chunk) {
-        bufferStr += decoder.write(chunk.slice(0, chunk.length));
-      } else {
-        moreToRead = false;
-      }
-
-      cb();
-    });
-  }
-
-  function onStreamReadable() {
-    moreToRead = true;
-    resumeDeferredRead();
-  }
-
-  function onStreamEnd() {
-    eof = true;
-    resumeDeferredRead();
-  }
-
-  readStream.on('readable', onStreamReadable);
-  readStream.on('end', onStreamEnd);
-  readStream.on('error', onFailure);
-
-  function shouldReadMore() {
-    findSeparator();
-
-    return separatorIndex < 0 && !eof;
-  }
-
-  function callWhile(conditionFn, bodyFn, doneCallback) {
-    if (conditionFn()) {
-      bodyFn(function (err) {
-        if (err) {
-          doneCallback(err);
-        } else {
-          setImmediate(callWhile, conditionFn, bodyFn, doneCallback);
+        if (bytesRead < this.readChunk) {
+            this.eofReached = true;
+            bufferData = bufferData.slice(0, totalBytesRead);
         }
-      });
-    } else {
-      doneCallback();
-    }
-  }
 
-  function readToSeparator(cb) {
-    callWhile(shouldReadMore, read, cb);
-  }
+        if (totalBytesRead) {
+            this.linesCache = this._extractLines(bufferData);
 
-  function hasNextLine() {
-    return bufferStr.length > 0 || !eof;
-  }
-
-  function nextLine(cb) {
-    if (closed) {
-      return cb(new Error('LineReader has been closed'));
-    }
-
-    function getLine(err) {
-      if (err) {
-        return cb(err);
-      }
-
-      if (separatorIndex < 0 && eof) {
-        separatorIndex = bufferStr.length;
-      }
-      var ret = bufferStr.substring(0, separatorIndex);
-
-      bufferStr = bufferStr.substring(separatorIndex + separatorLen);
-      separatorIndex = -1;
-      cb(undefined, ret);
-    }
-
-    findSeparator();
-
-    if (separatorIndex < 0) {
-      if (eof) {
-        if (hasNextLine()) {
-          separatorIndex = bufferStr.length;
-          getLine();
-        } else {
-          return cb(new Error('No more lines to read.'));
+            if (lineLeftovers) {
+                this.linesCache[0] = Buffer.concat([lineLeftovers, this.linesCache[0]]);
+            }
         }
-      } else {
-        readToSeparator(getLine);
-      }
-    } else {
-      getLine();
-    }
-  }
 
-  readToSeparator(function(err) {
-    if (err) {
-      onFailure(err);
-    } else {
-      return creationCb(undefined, {
-        hasNextLine: hasNextLine,
-        nextLine: nextLine,
-        close: close,
-        isOpen: isOpen,
-        isClosed: isClosed,
-        getReadStream: getReadStream
-      });
+        return totalBytesRead;
     }
-  });
+
+    next() {
+        if (!this.fd) return false;
+
+        let line = false;
+
+        let bytesRead;
+
+        if (!this.linesCache.length) {
+            bytesRead = this._readChunk();
+        }
+
+        if (this.linesCache.length) {
+            line = this.linesCache.shift();
+
+            const lastLineCharacter = line[line.length-1];
+
+            if (lastLineCharacter !== this.newLineCharacter) {
+                bytesRead = this._readChunk(line);
+
+                if (bytesRead) {
+                    line = this.linesCache.shift();
+                }
+            }
+        }
+            this.close();
+        if (line && line[line.length-1] === this.newLineCharacter) {
+            line = line.slice(0, line.length-1);
+        }
+
+        return line;
+    }
 }
 
-function open(filenameOrStream, options, cb) {
-  if (options instanceof Function) {
-    cb = options;
-    options = undefined;
-  }
-
-  var readStream;
-
-  if (typeof filenameOrStream.read == 'function') {
-    readStream = filenameOrStream;
-  } else if (typeof filenameOrStream === 'string' || filenameOrStream instanceof String) {
-    readStream = fs.createReadStream(filenameOrStream);
-  } else {
-    cb(new Error('Invalid file argument for LineReader.open.  Must be filename or stream.'));
-    return;
-  }
-
-  readStream.pause();
-  createLineReader(readStream, options, cb);
-}
-
-function eachLine(filename, options, iteratee, cb) {
-  if (options instanceof Function) {
-    cb = iteratee;
-    iteratee = options;
-    options = undefined;
-  }
-  var asyncIteratee = iteratee.length === 3;
-
-  var theReader;
-  var getReaderCb;
-
-  open(filename, options, function(err, reader) {
-    theReader = reader;
-    if (getReaderCb) {
-      getReaderCb(reader);
-    }
-
-    if (err) {
-      if (cb) cb(err);
-      return;
-    }
-
-    function finish(err) {
-      reader.close(function(err2) {
-        if (cb) cb(err || err2);
-      });
-    }
-
-    function newRead() {
-      if (reader.hasNextLine()) {
-        setImmediate(readNext);
-      } else {
-        finish();
-      }
-    }
-
-    function continueCb(continueReading) {
-      if (continueReading !== false) {
-        newRead();
-      } else {
-        finish();
-      }
-    }
-
-    function readNext() {
-      reader.nextLine(function(err, line) {
-        if (err) {
-          finish(err);
-        }
-
-        var last = !reader.hasNextLine();
-
-        if (asyncIteratee) {
-          iteratee(line, last, continueCb);
-        } else {
-          if (iteratee(line, last) !== false) {
-            newRead();
-          } else {
-            finish();
-          }
-        }
-      });
-    }
-
-    newRead();
-  });
-
-  // this hook is only for the sake of testing; if you choose to use it,
-  // please don't file any issues (unless you can also reproduce them without
-  // using this).
-  return {
-    getReader: function(cb) {
-      if (theReader) {
-        cb(theReader);
-      } else {
-        getReaderCb = cb;
-      }
-    }
-  };
-}
-
-module.exports.open = open;
-module.exports.eachLine = eachLine;
+module.exports = LineByLine;
